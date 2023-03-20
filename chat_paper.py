@@ -176,22 +176,19 @@ class Reader:
             # pprint.pprint(content)
             text += content
             
-            chat_summary_text = self.chat_summary(text=text)            
+            try:
+                chat_summary_text = self.chat_summary(text=text)     
+            except Exception as e:
+                if "maximum context" in str(e):
+                    current_tokens_index = str(e).find("your messages resulted in") + len("your messages resulted in")+1
+                    offset = int(str(e)[current_tokens_index:current_tokens_index+4])
+                    summary_prompt_token = offset+1000+50
+                    chat_summary_text = self.chat_summary(text=text, summary_prompt_token=summary_prompt_token)
+    
             htmls.append('## Paper:' + str(paper_index+1))
             htmls.append('\n\n\n')            
             htmls.append(chat_summary_text)
             
-            # 由于图像信息不重要，还经常报错，我把这段内容注释掉。
-#             # TODO 往md文档中插入论文里的像素最大的一张图片，这个方案可以弄的更加智能一些：
-#             first_image, ext = paper.get_image_path()
-#             if first_image is None or self.gitee_key == '':
-#                 pass
-#             else:                
-#                 image_title = self.validateTitle(paper.title)
-#                 image_url = self.upload_gitee(image_path=first_image, image_name=image_title, ext=ext)
-#                 htmls.append("\n\n")
-#                 htmls.append("![Fig]("+image_url+")")
-#                 htmls.append("\n\n")
             # 第二步总结方法：
             # TODO，由于有些文章的方法章节名是算法名，所以简单的通过关键词来筛选，很难获取，后面需要用其他的方案去优化。
             method_key = ''
@@ -243,7 +240,7 @@ class Reader:
             except:
                 pass                             
             mode = 'w' if paper_index == 0 else 'a'
-            file_name = os.path.join(export_path, date_str+'-'+self.validateTitle(paper.title)+"."+self.file_format)
+            file_name = os.path.join(export_path, date_str+'-'+self.validateTitle(paper.title[:80])+"."+self.file_format)
             self.export_to_markdown("\n".join(htmls), file_name=file_name, mode=mode)
             
             # file_name = os.path.join(export_path, date_str+'-'+self.validateTitle(paper.title)+".md")
@@ -253,11 +250,10 @@ class Reader:
     @tenacity.retry(wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
                     stop=tenacity.stop_after_attempt(5),
                     reraise=True)
-    def chat_conclusion(self, text):
+    def chat_conclusion(self, text, conclusion_prompt_token = 800):
         openai.api_key = self.chat_api_list[self.cur_api]
         self.cur_api += 1
         self.cur_api = 0 if self.cur_api >= len(self.chat_api_list)-1 else self.cur_api
-        conclusion_prompt_token = 650        
         text_token = len(self.encoding.encode(text))
         clip_text_index = int(len(text)*(self.max_token_num-conclusion_prompt_token)/text_token)
         clip_text = text[:clip_text_index]   
@@ -296,11 +292,10 @@ class Reader:
     @tenacity.retry(wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
                     stop=tenacity.stop_after_attempt(5),
                     reraise=True)
-    def chat_method(self, text):
+    def chat_method(self, text, method_prompt_token = 800):
         openai.api_key = self.chat_api_list[self.cur_api]
         self.cur_api += 1
         self.cur_api = 0 if self.cur_api >= len(self.chat_api_list)-1 else self.cur_api
-        method_prompt_token = 650        
         text_token = len(self.encoding.encode(text))
         clip_text_index = int(len(text)*(self.max_token_num-method_prompt_token)/text_token)
         clip_text = text[:clip_text_index]        
@@ -340,14 +335,13 @@ class Reader:
     @tenacity.retry(wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
                     stop=tenacity.stop_after_attempt(5),
                     reraise=True)
-    def chat_summary(self, text):
+    def chat_summary(self, text, summary_prompt_token = 1100):
         openai.api_key = self.chat_api_list[self.cur_api]
         proxies = {'http': "http://127.0.0.1:1080",
                    'https': "http://127.0.0.1:1087"}
         openai.proxy = proxies
         self.cur_api += 1
         self.cur_api = 0 if self.cur_api >= len(self.chat_api_list)-1 else self.cur_api
-        summary_prompt_token = 1000        
         text_token = len(self.encoding.encode(text))
         clip_text_index = int(len(text)*(self.max_token_num-summary_prompt_token)/text_token)
         clip_text = text[:clip_text_index]
