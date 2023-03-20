@@ -171,7 +171,10 @@ class Reader:
             text += 'Abstrat:' + paper.abs
             text += 'Paper_info:' + paper.section_text_dict['paper_info']
             # intro
-            text += list(paper.section_text_dict.values())[0]
+            content = "".join(list(paper.section_text_dict.values())[0:2]) # Todo: Read First two sections, e.g., Abstract + Introduction
+            # import pprint
+            # pprint.pprint(content)
+            text += content
             
             chat_summary_text = self.chat_summary(text=text)            
             htmls.append('## Paper:' + str(paper_index+1))
@@ -339,6 +342,9 @@ class Reader:
                     reraise=True)
     def chat_summary(self, text):
         openai.api_key = self.chat_api_list[self.cur_api]
+        proxies = {'http': "http://127.0.0.1:1080",
+                   'https': "http://127.0.0.1:1087"}
+        openai.proxy = proxies
         self.cur_api += 1
         self.cur_api = 0 if self.cur_api >= len(self.chat_api_list)-1 else self.cur_api
         summary_prompt_token = 1000        
@@ -346,7 +352,7 @@ class Reader:
         clip_text_index = int(len(text)*(self.max_token_num-summary_prompt_token)/text_token)
         clip_text = text[:clip_text_index]
         messages=[
-                {"role": "system", "content": "You are a researcher in the field of ["+self.key_word+"] who is good at summarizing papers using concise statements"},
+                {"role": "system", "content": "You are a researcher in the field of ["+self.key_word+"] who is good at summarizing papers and providing reviews using concise statements"},
                 {"role": "assistant", "content": "This is the title, author, link, abstract and introduction of an English document. I need your help to read and summarize the following questions: "+clip_text},
                 {"role": "user", "content": """                 
                  1. Mark the title of the paper (with Chinese translation)
@@ -359,6 +365,8 @@ class Reader:
                     - (2):What are the past methods? What are the problems with them? Is the approach well motivated?
                     - (3):What is the research methodology proposed in this paper?
                     - (4):On what task and what performance is achieved by the methods in this paper? Can the performance support their goals?
+                7. To the best of your knowledge, please provide a thorough assessment of the strengths and weaknesses of the paper, touching on each of the following dimensions: originality, quality, clarity, and signiêcance. Please summarize at least three strengths and three weaknesses.
+                
                  Follow the format of the output that follows:                  
                  1. Title: xxx\n\n
                  2. Authors: xxx\n\n
@@ -370,6 +378,7 @@ class Reader:
                     - (2):xxx;\n 
                     - (3):xxx;\n  
                     - (4):xxx.\n\n     
+                 7. Strengths and Weaknesses: xxx\n\n 
                  
                  Be sure to use {} answers (proper nouns need to be marked in English), statements as concise and academic as possible, do not have too much repetitive information, numerical values using the original numbers, be sure to strictly follow the format, the corresponding content output to xxx, in accordance with \n line feed.                 
                  """.format(self.language, self.language, self.language)},
